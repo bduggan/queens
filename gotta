@@ -38,6 +38,15 @@ helper task => sub($c,$name) {
     return $c->tasks->{$name};
 };
 
+helper glots => sub($c) {
+    my $cached;
+    $cached //= do {
+        my $glots = $c->ua->get('https://run.glot.io/languages/')->res->json;
+        [ map [ $_->{name} => $_->{url} ], @$glots ];
+    };
+    $cached;
+};
+
 get '/' => sub($c) {
     $c->render(template => 'index');
 };
@@ -60,9 +69,7 @@ get '/lang/:lang/:task' => [ lang => '\d+' ] => sub($c) {
     my $language = $1;
     my $code = $2;
     $code =~ s/^(.*) \{\{ out \}\} .*$ /$1/mxs;
-    my $glots = $c->ua->get('https://run.glot.io/languages/')->res->json;
-    $glots = [ map [ $_->{name} => $_->{url} ], @$glots ];
-    $c->render(template => 'langtask', code => $code, page => $page, language => $language, glots => $glots);
+    $c->render(template => 'langtask', code => $code, page => $page, language => $language, glots => $c->glots);
 } => 'langtask';
 
 # thx: https://github.com/zoffixznet/perl6.party/blob/master/app.pl
