@@ -3,6 +3,9 @@ use Mojolicious::Lite;
 use Data::Dumper;
 use v5.20;
 use experimental 'signatures';
+use Mojo::Util qw/trim/;
+
+plugin 'config';
 
 our %tasks;
 helper tasks => sub($c) {
@@ -53,17 +56,45 @@ get '/lang/:lang/:task' => [ lang => '\d+' ] => sub($c) {
         ->query(title => $task, action => 'edit', section => $c->stash('lang'));
     my $page = $c->ua->get($url)->res;
     my $markdown = $page->dom->at('textarea#wpTextbox1')->text;
-    $markdown =~ /<lang ([^>]+)>(.*)$/mxs;
+    $markdown =~ /<lang ([^>]+)>(.*)<\/lang>/mxs;
     my $language = $1;
     my $code = $2;
-    $code =~ s/^(.*)
-        \{\{
-        out
-        \}\}
-        .*$
-        /$1/mxs;
-    $c->render(template => 'langtask', code => $code, page => $page, language => $language);
+    $code =~ s/^(.*) \{\{ out \}\} .*$ /$1/mxs;
+    my $glots = $c->ua->get('https://run.glot.io/languages/')->res->json;
+    $glots = [ map [ $_->{name} => $_->{url} ], @$glots ];
+    $c->render(template => 'langtask', code => $code, page => $page, language => $language, glots => $glots);
 } => 'langtask';
+
+# thx: https://github.com/zoffixznet/perl6.party/blob/master/app.pl
+post '/run' => sub {
+    my $c = shift;
+    my $code = $c->param('code')
+        or return $c->reply->not_found;
+    $code =~ s/\N{ZERO WIDTH SPACE}//g;
+    say 'sending';
+    say $code;
+    say '---------';
+    my $glot_url = $c->param('glot');
+    $c->ua->post(
+        "$glot_url/latest" => {
+            'Content-type'  => 'application/json',
+            'Authorization' => 'Token ' . $c->config('glot_key')
+        } => json => { files => [{ name => 'runme.rb', content => $code }] }
+        => sub {
+            my ($ua, $tx) = @_;
+            say $tx->res->to_string;
+            my $out = $tx->res->json;
+            $out = trim join "\n", $out->{stdout} // (),
+                $out->{stderr} ? "STDERR:\n$out->{stderr}" : ();
+            $c->res->headers->content_type('text/plain');
+            $c->render( text => $out );
+        },
+    );
+
+    $c->render_later;
+};
+
+
 
 app->start;
 __DATA__
@@ -98,7 +129,14 @@ __DATA__
 % layout 'default';
 <h1><%= $task %></h1>
 <h2><%= $language %></h2>
-<pre style='border:1px solid black;'>
-%= $code
+%= form_for 'run', method => 'POST' => begin
+<pre>
+%= select_field 'glot', $glots
 </pre>
+<textarea name='code' style='border:1px solid black;' rows=25 cols=80>
+%= $code
+</textarea>
+<br>
+%= submit_button 'run'
+%= end
 
