@@ -59,7 +59,7 @@ get '/task/*name' => sub($c) {
     $c->render(template => 'task', langs => \@langs);
 } => 'task';
 
-get '/lang/:lang/:task' => [ lang => '\d+' ] => sub($c) {
+get '/lang/:lang/*task' => [ lang => '\d+' ] => sub($c) {
     my $task = $c->stash('task');
     my $url = Mojo::URL->new('http://rosettacode.org/mw/index.php')
         ->query(title => $task, action => 'edit', section => $c->stash('lang'));
@@ -69,6 +69,10 @@ get '/lang/:lang/:task' => [ lang => '\d+' ] => sub($c) {
     my $language = $1;
     my $code = $2;
     $code =~ s/^(.*) \{\{ out \}\} .*$ /$1/mxs;
+    my ($found) = grep { say "$language vs $_->[0]"; $language =~ /$_->[0]/xi } @{ $c->glots };
+    if ($found) {
+        $c->param(glot => $found->[1]);
+    }
     $c->render(template => 'langtask', code => $code, page => $page, language => $language, glots => $c->glots);
 } => 'langtask';
 
