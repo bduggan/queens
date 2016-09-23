@@ -24,12 +24,15 @@ helper tasks => sub($c) {
        my $got = $tx->res->json;
        %tasks = %{ $got->{results} };
    }
-   %tasks;
+   \%tasks;
 };
 
 helper task_names => sub($c) {
-    my %tasks = $c->tasks;
-    return sort keys %tasks;
+    return sort keys %{ $c->tasks };
+};
+
+helper task => sub($c,$name) {
+    return $c->tasks->{$name};
 };
 
 get '/' => sub($c) {
@@ -37,8 +40,30 @@ get '/' => sub($c) {
 };
 
 get '/task/*name' => sub($c) {
-    $c->render(template => 'task');
+    my $task = $c->stash('name');
+    my $page = $c->ua->get($c->task($task)->{fullurl})->res;
+    my @langs = $page->dom->find('span.mw-headline')
+        ->map(sub { shift->attr('id') })->each;
+    $c->render(template => 'task', langs => \@langs);
 } => 'task';
+
+get '/lang/:lang/:task' => [ lang => '\d+' ] => sub($c) {
+    my $task = $c->stash('task');
+    my $url = Mojo::URL->new('http://rosettacode.org/mw/index.php')
+        ->query(title => $task, action => 'edit', section => $c->stash('lang'));
+    my $page = $c->ua->get($url)->res;
+    my $markdown = $page->dom->at('textarea#wpTextbox1')->text;
+    $markdown =~ /<lang ([^>]+)>(.*)$/mxs;
+    my $language = $1;
+    my $code = $2;
+    $code =~ s/^(.*)
+        \{\{
+        out
+        \}\}
+        .*$
+        /$1/mxs;
+    $c->render(template => 'langtask', code => $code, page => $page, language => $language);
+} => 'langtask';
 
 app->start;
 __DATA__
@@ -60,4 +85,20 @@ __DATA__
 
 @@ task.html.ep
 % layout 'default';
+<h1><%= $name %></h1>
+<a target="_blank" href="<%= task($name)->{fullurl} %>">rosettacode</a>
+<ol>
+% my $i = 0;
+% for my $l (@$langs) {
+<li><%= link_to 'langtask' => { lang => ++$i, task => $name } => begin %><%= $l %><%= end %>
+% }
+</ol>
+
+@@ langtask.html.ep
+% layout 'default';
+<h1><%= $task %></h1>
+<h2><%= $language %></h2>
+<pre style='border:1px solid black;'>
+%= $code
+</pre>
 
