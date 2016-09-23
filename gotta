@@ -68,21 +68,15 @@ get '/lang/:lang/:task' => [ lang => '\d+' ] => sub($c) {
 # thx: https://github.com/zoffixznet/perl6.party/blob/master/app.pl
 post '/run' => sub {
     my $c = shift;
-    my $code = $c->param('code')
-        or return $c->reply->not_found;
+    my $code = $c->param('code') or return $c->reply->not_found;
     $code =~ s/\N{ZERO WIDTH SPACE}//g;
-    say 'sending';
-    say $code;
-    say '---------';
     my $glot_url = $c->param('glot');
     $c->ua->post(
         "$glot_url/latest" => {
             'Content-type'  => 'application/json',
             'Authorization' => 'Token ' . $c->config('glot_key')
         } => json => { files => [{ name => 'runme', content => $code }] }
-        => sub {
-            my ($ua, $tx) = @_;
-            say $tx->res->to_string;
+        => sub($ua, $tx) {
             my $out = $tx->res->json;
             $out = trim join "\n", $out->{stdout} // (),
                 $out->{stderr} ? "STDERR:\n$out->{stderr}" : ();
@@ -93,7 +87,6 @@ post '/run' => sub {
 
     $c->render_later;
 };
-
 
 
 app->start;
