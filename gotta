@@ -79,7 +79,7 @@ post '/run' => sub {
         "$glot_url/latest" => {
             'Content-type'  => 'application/json',
             'Authorization' => 'Token ' . $c->config('glot_key')
-        } => json => { files => [{ name => 'runme.rb', content => $code }] }
+        } => json => { files => [{ name => 'runme', content => $code }] }
         => sub {
             my ($ua, $tx) = @_;
             say $tx->res->to_string;
