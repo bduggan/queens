@@ -65,7 +65,7 @@ get '/lang/:lang/*task' => [ lang => '\d+' ] => sub($c) {
         ->query(title => $task, action => 'edit', section => $c->stash('lang'));
     my $page = $c->ua->get($url)->res;
     my $markdown = $page->dom->at('textarea#wpTextbox1')->text;
-    $markdown =~ /<lang ([^>]+)>(.*)<\/lang>/mxs;
+    $markdown =~ /<lang ([^>]+)>(.*?)\<\/lang\>/mxs;
     my $language = $1;
     my $code = $2;
     $code =~ s/^(.*) \{\{ out \}\} .*$ /$1/mxs;
@@ -82,11 +82,12 @@ post '/run' => sub {
     my $code = $c->param('code') or return $c->reply->not_found;
     $code =~ s/\N{ZERO WIDTH SPACE}//g;
     my $glot_url = $c->param('glot');
+    my $file = $c->param('filename');
     $c->ua->post(
         "$glot_url/latest" => {
             'Content-type'  => 'application/json',
             'Authorization' => 'Token ' . $c->config('glot_key')
-        } => json => { files => [{ name => 'runme', content => $code }] }
+        } => json => { files => [{ name => $file, content => $code }] }
         => sub($ua, $tx) {
             my $out = $tx->res->json;
             $out = trim join "\n", $out->{stdout} // (),
@@ -103,25 +104,38 @@ post '/run' => sub {
 app->start;
 __DATA__
 
+@@ layouts/default.html.ep
+<!DOCTYPE html>
+<html>
+  <head><title><%= title %></title>
+   %= stylesheet '/static/queens.css';
+   %= stylesheet '/static/codemirror.css';
+   %= stylesheet '//cdnjs.cloudflare.com/ajax/libs/foundation/6.2.3/foundation.min.css';
+  </head>
+  <body style='margin-left:5px;margin-right:5px;'>
+  <div class='row'>
+  <%= content %>
+  </div>
+  </body>
+</html>
+
+
 @@ index.html.ep
+% title 'poly';
 % layout 'default';
-% title 'Gletta';
 <ol>
 % for my $t (task_names) {
 <li><%= link_to 'task', { name => $t } => begin %><%= $t %><%= end %>
 % }
 </ol>
-@@ layouts/default.html.ep
-<!DOCTYPE html>
-<html>
-  <head><title><%= title %></title></head>
-  <body><%= content %></body>
-</html>
 
 @@ task.html.ep
+% title $name;
 % layout 'default';
 <h1><%= $name %></h1>
 <a target="_blank" href="<%= task($name)->{fullurl} %>">rosettacode</a>
+<br>
+<iframe class='embed' src="<%= task($name)->{fullurl} %>">></iframe>
 <ol>
 % my $i = 0;
 % for my $l (@$langs) {
@@ -130,17 +144,27 @@ __DATA__
 </ol>
 
 @@ langtask.html.ep
+% title $task;
 % layout 'default';
 <h1><%= $task %></h1>
 <h2><%= $language %></h2>
 %= form_for 'run', method => 'POST' => begin
-<pre>
-%= select_field 'glot', $glots
-</pre>
-<textarea name='code' style='border:1px solid black;' rows=25 cols=80>
+<div class='small-3 columns'>
+%= select_field 'glot', $glots;
+</div>
+<div class='small-3 columns'>
+%= text_field 'filename' => "runme";
+</div>
+<textarea class='CodeMirror CodeMirror-linenumbers' name='code' style='border:1px solid black;'>
 %= $code
 </textarea>
 <br>
-%= submit_button 'run'
+%= submit_button 'run' => class => "large button";
 %= end
 
+@@ static/queens.css
+iframe.embed {
+    width:100%;
+    height:500px;
+    overflow:scroll;
+}
